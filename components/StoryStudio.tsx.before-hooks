@@ -1,0 +1,979 @@
+import React, { useState, useEffect } from 'react';
+import { StoryboardSession, StoryAsset, StoryShot } from '../lib/database.types';
+import { useAuth } from '../contexts/AuthContext';
+import { ShotEditor } from './ShotEditor';
+import { AssetCard } from './AssetCard';
+import { useStoryAI } from '../hooks/useStoryAI';
+import { useAssetManager } from '../hooks/useAssetManager';
+import { useStorySession } from '../hooks/useStorySession';
+
+type Phase = 'setup' | 'story' | 'storyboard' | 'review';
+
+export const StoryStudio: React.FC = () => {
+    const { user } = useAuth();
+
+    // Custom hooks
+    const storyAI = useStoryAI();
+    const assetManager = useAssetManager({ userId: user?.id, sessionId: null });
+    const session = useStorySession();
+
+    const [currentPhase, setCurrentPhase] = useState<Phase>('setup');
+
+    // Assets state
+    const [actors, setActors] = useState<StoryAsset[]>([]);
+    const [environment, setEnvironment] = useState<StoryAsset | null>(null);
+    const [product, setProduct] = useState<StoryAsset | null>(null);
+
+    // Story state
+    const [storyText, setStoryText] = useState('');
+    const [genre, setGenre] = useState('');
+    const [mood, setMood] = useState('');
+    const [targetAudience, setTargetAudience] = useState('');
+
+    // Storyboard state
+    const [shots, setShots] = useState<StoryShot[]>([]);
+    const [editingShot, setEditingShot] = useState<StoryShot | null>(null);
+
+    // Load history on mount
+    useEffect(() => {
+        session.loadHistory();
+    }, []);
+
+    const loadHistory = async () => {
+        const { data, error } = await loadStoryboards();
+        if (!error && data) {
+            setHistory(data);
+        }
+    };
+
+    // Initialize default assets
+    useEffect(() => {
+        if (actors.length === 0) {
+            setActors([
+                { id: '1', type: 'actor', name: 'Actor 1', description: '', image_url: '', source: 'upload', created_at: new Date().toISOString() },
+                { id: '2', type: 'actor', name: 'Actor 2', description: '', image_url: '', source: 'upload', created_at: new Date().toISOString() },
+                { id: '3', type: 'actor', name: 'Actor 3', description: '', image_url: '', source: 'upload', created_at: new Date().toISOString() },
+            ]);
+        }
+        if (!environment) {
+            setEnvironment({ id: 'env-1', type: 'environment', name: 'Environment', description: '', image_url: '', source: 'upload', created_at: new Date().toISOString() });
+        }
+        if (!product) {
+            setProduct({ id: 'prod-1', type: 'product', name: 'Product', description: '', image_url: '', source: 'upload', created_at: new Date().toISOString() });
+        }
+    }, []);
+
+    const handleSave = async () => {
+        const allAssets = [...actors];
+        if (environment) allAssets.push(environment);
+        if (product) allAssets.push(product);
+
+        const sessionData: Partial<StoryboardSession> = {
+            id: sessionId || undefined,
+            title: sessionTitle,
+            config: {
+                story_text: storyText,
+                genre,
+                mood,
+                target_audience: targetAudience,
+            },
+            assets: allAssets,
+            shots,
+            num_shots: shots.length,
+        };
+
+        const { data, error } = await saveStoryboard(sessionData);
+        if (!error && data) {
+            setSessionId(data.id);
+            await loadHistory();
+        }
+    };
+
+    const loadSession = (session: StoryboardSession) => {
+        setSessionId(session.id);
+        setSessionTitle(session.title || 'Untitled Storyboard');
+        setStoryText(session.config.story_text || '');
+        setGenre(session.config.genre || '');
+        setMood(session.config.mood || '');
+        setTargetAudience(session.config.target_audience || '');
+
+        const loadedActors = session.assets.filter(a => a.type === 'actor');
+        const loadedEnv = session.assets.find(a => a.type === 'environment');
+        const loadedProd = session.assets.find(a => a.type === 'product');
+
+        setActors(loadedActors);
+        setEnvironment(loadedEnv || null);
+        setProduct(loadedProd || null);
+        setShots(session.shots);
+    };
+
+    // Upload image to Supabase Storage
+    const uploadAssetImage = async (file: File, assetId: string): Promise<string | null> => {
+        if (!user) return null;
+
+        setUploadingAssetId(assetId);
+        try {
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${user.id}/${sessionId || 'temp'}/${assetId}.${fileExt}`;
+
+            const { data, error } = await supabase.storage
+                .from('storyboard-assets')
+                .upload(fileName, file, { upsert: true });
+
+            if (error) throw error;
+
+            const { data: { publicUrl } } = supabase.storage
+                .from('storyboard-assets')
+                .getPublicUrl(fileName);
+
+            return publicUrl;
+        } catch (err) {
+            console.error('Upload error:', err);
+            setError('Fehler beim Hochladen des Bildes');
+            return null;
+        } finally {
+            setUploadingAssetId(null);
+        }
+    };
+
+    // Generate image with AI (using same method as ImageGen.tsx)
+    const generateAssetImage = async (asset: StoryAsset): Promise<string | null> => {
+        if (!user) return null;
+
+        setGeneratingAssetId(asset.id);
+        try {
+            const apiKey = process.env.API_KEY;
+            if (!apiKey) {
+                throw new Error('API Key missing');
+            }
+
+            // Build prompt based on asset type
+            let prompt = '';
+            if (asset.type === 'actor') {
+                prompt = `Professional portrait photo of a person for a storyboard. ${asset.description || asset.name}. Cinematic lighting, neutral background, high quality photography.`;
+            } else if (asset.type === 'environment') {
+                prompt = `Professional location photo for a storyboard. ${asset.description || asset.name}. Cinematic establishing shot, professional photography, detailed environment.`;
+            } else if (asset.type === 'product') {
+                prompt = `Professional product photography for a storyboard. ${asset.description || asset.name}. Commercial photography, clean background, well-lit, high quality.`;
+            }
+
+            // Use the same API structure as ImageGen.tsx
+            const ai = new GoogleGenAI({ apiKey });
+
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash-image',
+                contents: {
+                    parts: [{ text: prompt }]
+                },
+                config: {
+                    imageConfig: {
+                        aspectRatio: '1:1',
+                    }
+                }
+            });
+
+            // Parse response to find image part
+            const respParts = response.candidates?.[0]?.content?.parts;
+            if (respParts) {
+                for (const part of respParts) {
+                    if (part.inlineData) {
+                        const base64Data = part.inlineData.data;
+                        const mimeType = part.inlineData.mimeType || 'image/png';
+
+                        // Convert base64 to blob and upload to Supabase
+                        const byteCharacters = atob(base64Data);
+                        const byteNumbers = new Array(byteCharacters.length);
+                        for (let i = 0; i < byteCharacters.length; i++) {
+                            byteNumbers[i] = byteCharacters.charCodeAt(i);
+                        }
+                        const byteArray = new Uint8Array(byteNumbers);
+                        const blob = new Blob([byteArray], { type: mimeType });
+                        const file = new File([blob], `${asset.id}-generated.png`, { type: mimeType });
+
+                        // Upload to Supabase Storage
+                        const imageUrl = await uploadAssetImage(file, asset.id);
+                        console.log('Generated and uploaded:', imageUrl);
+                        return imageUrl;
+                    }
+                }
+            }
+
+            throw new Error('Keine Bilddaten in der Antwort');
+        } catch (err) {
+            console.error('Generation error:', err);
+            setError(`Fehler bei der KI-Bildgenerierung: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`);
+            return null;
+        } finally {
+            setGeneratingAssetId(null);
+        }
+    };
+
+
+    // Handle asset upload
+    const handleAssetUpload = async (file: File, assetId: string) => {
+        console.log('handleAssetUpload called for asset:', assetId);
+        const imageUrl = await uploadAssetImage(file, assetId);
+        console.log('Received image URL:', imageUrl);
+
+        if (imageUrl) {
+            // Update the asset with the new image URL
+            const actorIndex = actors.findIndex(a => a.id === assetId);
+            if (actorIndex !== -1) {
+                const newActors = [...actors];
+                newActors[actorIndex] = { ...newActors[actorIndex], image_url: imageUrl, source: 'upload' };
+                console.log('Updated actor:', newActors[actorIndex]);
+                setActors(newActors);
+            } else if (environment?.id === assetId) {
+                const updated = { ...environment, image_url: imageUrl, source: 'upload' };
+                console.log('Updated environment:', updated);
+                setEnvironment(updated);
+            } else if (product?.id === assetId) {
+                const updated = { ...product, image_url: imageUrl, source: 'upload' };
+                console.log('Updated product:', updated);
+                setProduct(updated);
+            }
+        }
+    };
+
+
+    // Handle asset AI generation
+    const handleAssetGenerate = async (asset: StoryAsset) => {
+        const imageUrl = await generateAssetImage(asset);
+        if (imageUrl) {
+            // Update the asset with the new image URL
+            const actorIndex = actors.findIndex(a => a.id === asset.id);
+            if (actorIndex !== -1) {
+                const newActors = [...actors];
+                newActors[actorIndex] = { ...newActors[actorIndex], image_url: imageUrl, source: 'ai-generated' };
+                setActors(newActors);
+            } else if (environment?.id === asset.id) {
+                setEnvironment({ ...environment, image_url: imageUrl, source: 'ai-generated' });
+            } else if (product?.id === asset.id) {
+                setProduct({ ...product, image_url: imageUrl, source: 'ai-generated' });
+            }
+        }
+    };
+
+    // Generate story with AI
+    const generateStory = async () => {
+        if (!user) return;
+
+        setIsGenerating(true);
+        setError(null);
+
+        try {
+            const apiKey = process.env.API_KEY;
+            if (!apiKey) throw new Error('API Key missing');
+
+            const ai = new GoogleGenAI({ apiKey });
+
+            // Build context from assets
+            const actorDescriptions = actors
+                .filter(a => a.description)
+                .map((a, i) => `${a.name}: ${a.description}`)
+                .join(', ');
+
+            const prompt = `Create a compelling ${genre || 'commercial'} story for a storyboard with the following elements:
+
+Actors: ${actorDescriptions || 'Not specified'}
+Environment: ${environment?.description || environment?.name || 'Not specified'}
+Product: ${product?.description || product?.name || 'Not specified'}
+Mood: ${mood || 'engaging'}
+Target Audience: ${targetAudience || 'general audience'}
+
+Write a concise story (3-5 paragraphs) that would work well for a commercial or short video. Focus on visual storytelling and include specific actions and scenes.`;
+
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.0-flash',
+                contents: { parts: [{ text: prompt }] }
+            });
+
+            const generatedStory = response.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            setStoryText(generatedStory);
+
+        } catch (err) {
+            console.error('Story generation error:', err);
+            setError(`Fehler bei der Story-Generierung: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`);
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
+    // Generate shots with AI
+    const generateShots = async () => {
+        if (!user) return;
+
+        setIsGenerating(true);
+        setError(null);
+
+        try {
+            const apiKey = process.env.API_KEY;
+            if (!apiKey) throw new Error('API Key missing');
+
+            const ai = new GoogleGenAI({ apiKey });
+
+            // Build comprehensive context
+            const actorList = actors
+                .filter(a => a.description || a.name)
+                .map(a => `- ${a.name}${a.description ? ': ' + a.description : ''}`)
+                .join('\n');
+
+            const prompt = `You are a professional storyboard artist. Create a detailed shot list for a ${genre || 'commercial'} video based on this information:
+
+STORY:
+${storyText || 'Create a compelling visual narrative'}
+
+ASSETS:
+Actors:
+${actorList || '- Not specified'}
+
+Environment: ${environment?.description || environment?.name || 'Not specified'}
+Product: ${product?.description || product?.name || 'Not specified'}
+
+PARAMETERS:
+- Mood: ${mood || 'engaging'}
+- Target Audience: ${targetAudience || 'general audience'}
+- Duration: 30-60 seconds
+
+Create 5-8 shots that tell this story visually. For each shot, provide:
+1. Scene number
+2. Title (brief, descriptive)
+3. Description (what happens in the shot, 2-3 sentences)
+4. Location (specific place in the environment)
+5. Framing (choose from: extreme-close-up, close-up, medium-shot, full-shot, wide-shot)
+6. Camera angle (choose from: eye-level, high-angle, low-angle, birds-eye, dutch-angle)
+7. Camera movement (choose from: static, pan, tilt, dolly, tracking, crane, handheld)
+8. Lighting (choose from: natural, studio, dramatic, soft, backlit)
+9. Duration (in seconds, 3-10s per shot)
+10. Movement notes (actor/object movements)
+11. Audio notes (dialogue, sound effects, music cues)
+
+Format your response as a JSON array of shot objects. Example:
+[
+  {
+    "scene_number": "1",
+    "title": "Opening Establishing Shot",
+    "description": "Wide shot of the city skyline at dawn...",
+    "location": "City rooftop",
+    "framing": "wide-shot",
+    "camera_angle": "high-angle",
+    "camera_movement": "slow-pan",
+    "lighting": "natural",
+    "duration": 5,
+    "movement_notes": "Camera pans left to right",
+    "audio_notes": "Ambient city sounds, soft music"
+  }
+]
+
+Respond ONLY with the JSON array, no additional text.`;
+
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.0-flash',
+                contents: { parts: [{ text: prompt }] }
+            });
+
+            const responseText = response.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+            // Parse JSON response
+            const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+            if (!jsonMatch) {
+                throw new Error('Invalid response format from AI');
+            }
+
+            const generatedShots = JSON.parse(jsonMatch[0]);
+
+            // Convert to StoryShot format
+            const newShots: StoryShot[] = generatedShots.map((shot: any, index: number) => ({
+                id: Date.now().toString() + index,
+                order: index,
+                scene_number: shot.scene_number || `${index + 1}`,
+                title: shot.title || `Shot ${index + 1}`,
+                description: shot.description || '',
+                location: shot.location || '',
+                framing: shot.framing || 'medium-shot',
+                camera_angle: shot.camera_angle || 'eye-level',
+                camera_movement: shot.camera_movement || 'static',
+                focal_length: '50mm',
+                lighting: shot.lighting || 'natural',
+                equipment: '',
+                audio_notes: shot.audio_notes || '',
+                estimated_duration: shot.duration || 5,
+                movement_notes: shot.movement_notes || '',
+                vfx_notes: '',
+                actors: actors.map(a => a.id),
+                environment: environment?.id || '',
+                products: product ? [product.id] : [],
+                notes: '',
+                duration: shot.duration || 5,
+                created_at: new Date().toISOString(),
+            }));
+
+            setShots(newShots);
+
+        } catch (err) {
+            console.error('Shot generation error:', err);
+            setError(`Fehler bei der Shot-Generierung: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`);
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
+    const renderPhaseContent = () => {
+        switch (currentPhase) {
+            case 'setup':
+                return renderSetupPhase();
+            case 'story':
+                return renderStoryPhase();
+            case 'storyboard':
+                return renderStoryboardPhase();
+            case 'review':
+                return renderReviewPhase();
+        }
+    };
+
+    const renderSetupPhase = () => (
+        <div className="space-y-8">
+            <div>
+                <h3 className="text-lg font-bold text-white mb-4">Actors ({actors.length})</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {actors.map((actor, index) => (
+                        <AssetCard
+                            key={actor.id}
+                            asset={actor}
+                            onUpdate={(updatedActor) => {
+                                const newActors = [...actors];
+                                newActors[index] = updatedActor;
+                                setActors(newActors);
+                            }}
+                            onUpload={handleAssetUpload}
+                            onGenerate={handleAssetGenerate}
+                            isUploading={uploadingAssetId === actor.id}
+                            isGenerating={generatingAssetId === actor.id}
+                        />
+                    ))}
+                </div>
+            </div>
+
+            <div>
+                <h3 className="text-lg font-bold text-white mb-4">Environment</h3>
+                {environment && (
+                    <div className="max-w-md">
+                        <AssetCard
+                            asset={environment}
+                            onUpdate={setEnvironment}
+                            onUpload={handleAssetUpload}
+                            onGenerate={handleAssetGenerate}
+                            isUploading={uploadingAssetId === environment.id}
+                            isGenerating={generatingAssetId === environment.id}
+                        />
+                    </div>
+                )}
+            </div>
+
+            <div>
+                <h3 className="text-lg font-bold text-white mb-4">Product</h3>
+                {product && (
+                    <div className="max-w-md">
+                        <AssetCard
+                            asset={product}
+                            onUpdate={setProduct}
+                            onUpload={handleAssetUpload}
+                            onGenerate={handleAssetGenerate}
+                            isUploading={uploadingAssetId === product.id}
+                            isGenerating={generatingAssetId === product.id}
+                        />
+                    </div>
+                )}
+            </div>
+
+            <button
+                onClick={() => setCurrentPhase('story')}
+                className="px-6 py-3 bg-primary hover:bg-primary-hover text-white font-semibold rounded-lg transition-all"
+            >
+                Continue to Story →
+            </button>
+        </div>
+    );
+
+    const renderStoryPhase = () => (
+        <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label className="block text-sm text-slate-400 mb-2">Genre</label>
+                    <input
+                        type="text"
+                        value={genre}
+                        onChange={(e) => setGenre(e.target.value)}
+                        className="w-full bg-slate-900/50 border border-white/10 rounded-lg px-3 py-2 text-white"
+                        placeholder="e.g., Drama, Comedy"
+                    />
+                </div>
+                <div>
+                    <label className="block text-sm text-slate-400 mb-2">Mood</label>
+                    <input
+                        type="text"
+                        value={mood}
+                        onChange={(e) => setMood(e.target.value)}
+                        className="w-full bg-slate-900/50 border border-white/10 rounded-lg px-3 py-2 text-white"
+                        placeholder="e.g., Uplifting, Suspenseful"
+                    />
+                </div>
+                <div>
+                    <label className="block text-sm text-slate-400 mb-2">Target Audience</label>
+                    <input
+                        type="text"
+                        value={targetAudience}
+                        onChange={(e) => setTargetAudience(e.target.value)}
+                        className="w-full bg-slate-900/50 border border-white/10 rounded-lg px-3 py-2 text-white"
+                        placeholder="e.g., Young adults"
+                    />
+                </div>
+            </div>
+
+            <div>
+                <div className="flex justify-between items-center mb-2">
+                    <label className="block text-sm text-slate-400">Story</label>
+                    <button
+                        onClick={generateStory}
+                        disabled={isGenerating}
+                        className="px-4 py-2 bg-primary hover:bg-primary-hover disabled:bg-slate-700 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-all flex items-center gap-2"
+                    >
+                        {isGenerating ? (
+                            <>
+                                <span className="material-icons-round text-sm animate-spin">refresh</span>
+                                Generiere...
+                            </>
+                        ) : (
+                            <>
+                                <span className="material-icons-round text-sm">auto_awesome</span>
+                                Generate Story with AI
+                            </>
+                        )}
+                    </button>
+                </div>
+                <textarea
+                    value={storyText}
+                    onChange={(e) => setStoryText(e.target.value)}
+                    className="w-full bg-slate-900/50 border border-white/10 rounded-lg px-4 py-3 text-white resize-none"
+                    rows={12}
+                    placeholder="Write your story here..."
+                />
+            </div>
+
+            <div className="flex gap-4">
+                <button
+                    onClick={() => setCurrentPhase('setup')}
+                    className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-all"
+                >
+                    ← Back to Setup
+                </button>
+                <button
+                    onClick={() => setCurrentPhase('storyboard')}
+                    className="px-6 py-3 bg-primary hover:bg-primary-hover text-white font-semibold rounded-lg transition-all"
+                >
+                    Continue to Storyboard →
+                </button>
+            </div>
+        </div>
+    );
+
+    const renderStoryboardPhase = () => (
+        <div className="space-y-6">
+            <div className="flex justify-between items-center">
+                <h3 className="text-lg font-bold text-white">Shots ({shots.length})</h3>
+                <div className="flex gap-3">
+                    <button
+                        onClick={generateShots}
+                        disabled={isGenerating}
+                        className="px-4 py-2 bg-gradient-to-r from-purple-600 to-primary hover:from-purple-700 hover:to-primary-hover disabled:from-slate-700 disabled:to-slate-700 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-all flex items-center gap-2"
+                    >
+                        {isGenerating ? (
+                            <>
+                                <span className="material-icons-round text-sm animate-spin">refresh</span>
+                                Generiere...
+                            </>
+                        ) : (
+                            <>
+                                <span className="material-icons-round text-sm">auto_awesome</span>
+                                Generate Shots with AI
+                            </>
+                        )}
+                    </button>
+                    <button
+                        onClick={() => {
+                            const newShot: StoryShot = {
+                                id: Date.now().toString(),
+                                order: shots.length,
+
+                                // Basis-Informationen
+                                scene_number: `${shots.length + 1}`,
+                                title: `Shot ${shots.length + 1}`,
+                                description: '',
+                                location: '',
+
+                                // Visuelle Gestaltung
+                                framing: 'medium-shot',
+                                camera_angle: 'eye-level',
+                                camera_movement: 'static',
+                                focal_length: '50mm',
+
+                                // Technische Details
+                                lighting: 'natural',
+                                equipment: '',
+                                audio_notes: '',
+                                estimated_duration: 5,
+
+                                // Storyboard-spezifisch
+                                movement_notes: '',
+                                vfx_notes: '',
+
+                                // Asset-Referenzen
+                                actors: [],
+                                environment: environment?.id || '',
+                                products: [],
+
+                                // Zusätzlich
+                                notes: '',
+                                duration: 5,
+                                created_at: new Date().toISOString(),
+                            };
+                            setShots([...shots, newShot]);
+                        }}
+                        className="px-4 py-2 bg-primary hover:bg-primary-hover text-white font-semibold rounded-lg transition-all flex items-center gap-2"
+                    >
+                        <span className="material-icons-round text-sm">add</span>
+                        Add Shot
+                    </button>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {shots.map((shot, index) => (
+                    <div
+                        key={shot.id}
+                        className="bg-slate-800/40 border border-white/10 rounded-xl p-4 hover:border-primary/30 transition-all cursor-pointer"
+                        onClick={() => setEditingShot(shot)}
+                    >
+                        <div className="flex justify-between items-start mb-3">
+                            <div>
+                                <span className="text-xs text-slate-500">Shot {index + 1}</span>
+                                {shot.scene_number && (
+                                    <span className="ml-2 text-xs text-primary">#{shot.scene_number}</span>
+                                )}
+                            </div>
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShots(shots.filter(s => s.id !== shot.id));
+                                }}
+                                className="text-red-400 hover:text-red-300"
+                            >
+                                <span className="material-icons-round text-sm">delete</span>
+                            </button>
+                        </div>
+                        <h4 className="text-white font-medium mb-2">{shot.title || 'Untitled Shot'}</h4>
+                        <p className="text-slate-400 text-xs mb-3 line-clamp-2">{shot.description || 'No description'}</p>
+
+                        <div className="flex flex-wrap gap-1 mb-2">
+                            <span className="px-2 py-0.5 bg-primary/20 text-primary text-xs rounded">{shot.framing}</span>
+                            <span className="px-2 py-0.5 bg-slate-700 text-slate-300 text-xs rounded">{shot.camera_movement}</span>
+                            {shot.duration && (
+                                <span className="px-2 py-0.5 bg-slate-700 text-slate-300 text-xs rounded">{shot.duration}s</span>
+                            )}
+                        </div>
+
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingShot(shot);
+                            }}
+                            className="w-full mt-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-medium rounded transition-all flex items-center justify-center gap-1"
+                        >
+                            <span className="material-icons-round text-xs">edit</span>
+                            Bearbeiten
+                        </button>
+                    </div>
+                ))}
+            </div>
+
+            <div className="flex gap-4">
+                <button
+                    onClick={() => setCurrentPhase('story')}
+                    className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-all"
+                >
+                    ← Back to Story
+                </button>
+                <button
+                    onClick={() => setCurrentPhase('review')}
+                    className="px-6 py-3 bg-primary hover:bg-primary-hover text-white font-semibold rounded-lg transition-all"
+                >
+                    Continue to Review →
+                </button>
+            </div>
+        </div>
+    );
+
+    const renderReviewPhase = () => (
+        <div className="space-y-6">
+            {/* Summary Header */}
+            <div className="bg-slate-800/40 border border-white/10 rounded-xl p-6">
+                <h3 className="text-lg font-bold text-white mb-4">Storyboard Übersicht</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div>
+                        <p className="text-slate-500">Titel</p>
+                        <p className="text-white font-medium">{sessionTitle}</p>
+                    </div>
+                    <div>
+                        <p className="text-slate-500">Shots</p>
+                        <p className="text-white font-medium">{shots.length}</p>
+                    </div>
+                    <div>
+                        <p className="text-slate-500">Gesamtdauer</p>
+                        <p className="text-white font-medium">{shots.reduce((sum, s) => sum + s.duration, 0)}s</p>
+                    </div>
+                    <div>
+                        <p className="text-slate-500">Darsteller</p>
+                        <p className="text-white font-medium">{actors.length}</p>
+                    </div>
+                </div>
+            </div>
+
+            {/* Storyboard Shots - Linear View */}
+            <div className="space-y-6">
+                <h3 className="text-lg font-bold text-white">Storyboard</h3>
+
+                {shots.length === 0 ? (
+                    <div className="bg-slate-800/40 border border-white/10 rounded-xl p-12 text-center">
+                        <span className="material-icons-round text-slate-600 text-5xl mb-4">movie_creation</span>
+                        <p className="text-slate-400">Keine Shots vorhanden. Gehen Sie zurück zum Storyboard, um Shots hinzuzufügen.</p>
+                    </div>
+                ) : (
+                    shots.map((shot, index) => (
+                        <div key={shot.id} className="bg-slate-800/40 border border-white/10 rounded-xl overflow-hidden">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-6">
+                                {/* Shot Image */}
+                                <div className="md:col-span-1">
+                                    <div className="aspect-video bg-slate-900/50 rounded-lg border border-white/10 flex items-center justify-center overflow-hidden">
+                                        {shot.image_url ? (
+                                            <img src={shot.image_url} alt={shot.title} className="w-full h-full object-cover" />
+                                        ) : (
+                                            <div className="text-center p-4">
+                                                <span className="material-icons-round text-slate-600 text-4xl mb-2">image</span>
+                                                <p className="text-slate-500 text-xs">Kein Bild generiert</p>
+                                                <button
+                                                    onClick={() => {/* TODO: Generate image */ }}
+                                                    className="mt-2 px-3 py-1.5 bg-primary hover:bg-primary-hover text-white text-xs rounded transition-all"
+                                                >
+                                                    Bild generieren
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="mt-2 text-xs text-slate-500">
+                                        Shot {index + 1} {shot.scene_number && `• Szene ${shot.scene_number}`}
+                                    </div>
+                                </div>
+
+                                {/* Shot Details */}
+                                <div className="md:col-span-2 space-y-4">
+                                    {/* Title & Description */}
+                                    <div>
+                                        <h4 className="text-lg font-bold text-white mb-2">{shot.title}</h4>
+                                        <p className="text-slate-300 text-sm">{shot.description}</p>
+                                    </div>
+
+                                    {/* Technical Details Grid */}
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+                                        <div>
+                                            <p className="text-slate-500 mb-1">Location</p>
+                                            <p className="text-white">{shot.location || '-'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-slate-500 mb-1">Framing</p>
+                                            <p className="text-white">{shot.framing}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-slate-500 mb-1">Perspektive</p>
+                                            <p className="text-white">{shot.camera_angle}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-slate-500 mb-1">Bewegung</p>
+                                            <p className="text-white">{shot.camera_movement}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-slate-500 mb-1">Brennweite</p>
+                                            <p className="text-white">{shot.focal_length}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-slate-500 mb-1">Dauer</p>
+                                            <p className="text-white">{shot.duration}s</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-slate-500 mb-1">Licht</p>
+                                            <p className="text-white">{shot.lighting}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-slate-500 mb-1">Equipment</p>
+                                            <p className="text-white">{shot.equipment || '-'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-slate-500 mb-1">Audio</p>
+                                            <p className="text-white">{shot.audio_notes || '-'}</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Additional Notes */}
+                                    {(shot.movement_notes || shot.vfx_notes || shot.notes) && (
+                                        <div className="space-y-2 text-xs">
+                                            {shot.movement_notes && (
+                                                <div>
+                                                    <p className="text-slate-500">Bewegungsnotizen:</p>
+                                                    <p className="text-slate-300">{shot.movement_notes}</p>
+                                                </div>
+                                            )}
+                                            {shot.vfx_notes && (
+                                                <div>
+                                                    <p className="text-slate-500">VFX:</p>
+                                                    <p className="text-slate-300">{shot.vfx_notes}</p>
+                                                </div>
+                                            )}
+                                            {shot.notes && (
+                                                <div>
+                                                    <p className="text-slate-500">Notizen:</p>
+                                                    <p className="text-slate-300">{shot.notes}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Action Buttons */}
+                                    <div className="flex gap-2 pt-2">
+                                        <button
+                                            onClick={() => setEditingShot(shot)}
+                                            className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded transition-all flex items-center gap-1"
+                                        >
+                                            <span className="material-icons-round text-xs">edit</span>
+                                            Bearbeiten
+                                        </button>
+                                        {!shot.image_url && (
+                                            <button
+                                                onClick={() => {/* TODO: Generate image */ }}
+                                                className="px-3 py-1.5 bg-primary hover:bg-primary-hover text-white text-xs rounded transition-all flex items-center gap-1"
+                                            >
+                                                <span className="material-icons-round text-xs">auto_awesome</span>
+                                                Bild generieren
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-4">
+                <button
+                    onClick={() => setCurrentPhase('storyboard')}
+                    className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-all"
+                >
+                    ← Zurück zum Storyboard
+                </button>
+                <button
+                    onClick={handleSave}
+                    className="px-6 py-3 bg-green-600 hover:bg-green-500 text-white font-semibold rounded-lg transition-all flex items-center gap-2"
+                >
+                    <span className="material-icons-round text-sm">save</span>
+                    Speichern
+                </button>
+            </div>
+        </div>
+    );
+
+    return (
+        <div className="h-full flex overflow-hidden bg-[#0a0f18]">
+            {/* History Sidebar */}
+            <aside className="w-80 border-r border-white/10 p-4 overflow-y-auto hide-scrollbar">
+                <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-lg font-bold text-white">Story Studio</h2>
+                    <button
+                        onClick={() => {
+                            setSessionId(null);
+                            setSessionTitle('Untitled Storyboard');
+                            setStoryText('');
+                            setShots([]);
+                            setCurrentPhase('setup');
+                        }}
+                        className="px-3 py-1.5 bg-primary hover:bg-primary-hover text-white text-sm font-semibold rounded-lg transition-all"
+                    >
+                        New
+                    </button>
+                </div>
+
+                {history.length > 0 && (
+                    <div className="space-y-2">
+                        {history.map((session) => (
+                            <button
+                                key={session.id}
+                                onClick={() => loadSession(session)}
+                                className="w-full text-left p-3 bg-slate-800/40 hover:bg-slate-700/40 border border-white/10 rounded-lg transition-all"
+                            >
+                                <p className="text-white text-sm font-medium truncate">{session.title}</p>
+                                <p className="text-slate-400 text-xs mt-1">{session.shots.length} shots</p>
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </aside>
+
+            {/* Main Content */}
+            <main className="flex-1 overflow-y-auto p-8">
+                {/* Header */}
+                <div className="mb-8">
+                    <input
+                        type="text"
+                        value={sessionTitle}
+                        onChange={(e) => setSessionTitle(e.target.value)}
+                        className="text-3xl font-bold text-white bg-transparent border-none outline-none mb-4"
+                        placeholder="Untitled Storyboard"
+                    />
+
+                    {/* Phase Tabs */}
+                    <div className="flex gap-2">
+                        {(['setup', 'story', 'storyboard', 'review'] as Phase[]).map((phase) => (
+                            <button
+                                key={phase}
+                                onClick={() => setCurrentPhase(phase)}
+                                className={`px-4 py-2 rounded-lg font-medium transition-all ${currentPhase === phase
+                                    ? 'bg-primary text-white'
+                                    : 'bg-slate-800/40 text-slate-400 hover:text-white'
+                                    }`}
+                            >
+                                {phase.charAt(0).toUpperCase() + phase.slice(1)}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Phase Content */}
+                {renderPhaseContent()}
+            </main>
+
+            {/* Shot Editor Modal */}
+            {editingShot && (
+                <ShotEditor
+                    shot={editingShot}
+                    actors={actors}
+                    environment={environment}
+                    products={product ? [product] : []}
+                    onSave={(updatedShot) => {
+                        setShots(shots.map(s => s.id === updatedShot.id ? updatedShot : s));
+                        setEditingShot(null);
+                    }}
+                    onClose={() => setEditingShot(null)}
+                />
+            )}
+        </div>
+    );
+};

@@ -1,0 +1,213 @@
+import React, { useState } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
+
+interface LoginProps {
+    onSwitchToSignup: () => void;
+}
+
+export const Login: React.FC<LoginProps> = ({ onSwitchToSignup }) => {
+    const { signIn, resetPassword } = useAuth();
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    // Forgot password state
+    const [showForgotPassword, setShowForgotPassword] = useState(false);
+    const [resetEmail, setResetEmail] = useState('');
+    const [resetLoading, setResetLoading] = useState(false);
+    const [resetSuccess, setResetSuccess] = useState(false);
+    const [resetError, setResetError] = useState<string | null>(null);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError(null);
+        setLoading(true);
+
+        const { error: signInError } = await signIn(email, password);
+
+        if (signInError) {
+            setError(signInError.message);
+            setLoading(false);
+        }
+        // If successful, AuthContext will handle the state update
+    };
+
+    const handleForgotPassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setResetError(null);
+        setResetLoading(true);
+
+        const { error } = await resetPassword(resetEmail);
+
+        if (error) {
+            setResetError(error.message);
+            setResetLoading(false);
+        } else {
+            setResetSuccess(true);
+            setResetLoading(false);
+            // Auto-close after 3 seconds
+            setTimeout(() => {
+                setShowForgotPassword(false);
+                setResetSuccess(false);
+                setResetEmail('');
+            }, 3000);
+        }
+    };
+
+    return (
+        <div className="min-h-screen w-full flex items-center justify-center bg-[#101622] p-4">
+            <div className="w-full max-w-md">
+                {/* Logo/Title */}
+                <div className="text-center mb-8">
+                    <h1 className="text-4xl font-bold bg-gradient-to-r from-[#135bec] to-[#4a90ff] bg-clip-text text-transparent mb-2">
+                        Visionary PX Studio
+                    </h1>
+                    <p className="text-slate-400">Create the Future</p>
+                </div>
+
+                {/* Login Card */}
+                <div className="bg-slate-800/40 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-8 shadow-2xl shadow-[#135bec]/10">
+                    <h2 className="text-2xl font-semibold text-slate-100 mb-6">Welcome Back</h2>
+
+                    <form onSubmit={handleSubmit} className="space-y-5">
+                        {/* Email Input */}
+                        <div>
+                            <label htmlFor="email" className="block text-sm font-medium text-slate-300 mb-2">
+                                Email
+                            </label>
+                            <input
+                                id="email"
+                                type="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                required
+                                className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600/50 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#135bec] focus:border-transparent transition-all"
+                                placeholder="you@example.com"
+                            />
+                        </div>
+
+                        {/* Password Input */}
+                        <div>
+                            <div className="flex items-center justify-between mb-2">
+                                <label htmlFor="password" className="block text-sm font-medium text-slate-300">
+                                    Password
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowForgotPassword(true)}
+                                    className="text-xs text-[#135bec] hover:text-[#4a90ff] transition-colors"
+                                >
+                                    Forgot Password?
+                                </button>
+                            </div>
+                            <input
+                                id="password"
+                                type="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                required
+                                className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600/50 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#135bec] focus:border-transparent transition-all"
+                                placeholder="••••••••"
+                            />
+                        </div>
+
+                        {/* Error Message */}
+                        {error && (
+                            <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-3 text-red-400 text-sm">
+                                {error}
+                            </div>
+                        )}
+
+                        {/* Submit Button */}
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="w-full py-3 bg-gradient-to-r from-[#135bec] to-[#4a90ff] text-white font-semibold rounded-lg shadow-lg shadow-[#135bec]/30 hover:shadow-[#135bec]/50 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {loading ? 'Signing In...' : 'Sign In'}
+                        </button>
+                    </form>
+
+                    {/* Switch to Signup */}
+                    <div className="mt-6 text-center">
+                        <p className="text-slate-400 text-sm">
+                            Don't have an account?{' '}
+                            <button
+                                onClick={onSwitchToSignup}
+                                className="text-[#135bec] hover:text-[#4a90ff] font-medium transition-colors"
+                            >
+                                Sign Up
+                            </button>
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            {/* Forgot Password Modal */}
+            {showForgotPassword && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                    <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 max-w-md w-full shadow-2xl">
+                        <div className="flex items-center justify-between mb-6">
+                            <h3 className="text-xl font-bold text-white">Reset Password</h3>
+                            <button
+                                onClick={() => {
+                                    setShowForgotPassword(false);
+                                    setResetError(null);
+                                    setResetSuccess(false);
+                                    setResetEmail('');
+                                }}
+                                className="text-slate-400 hover:text-white transition-colors"
+                            >
+                                <span className="material-icons-round">close</span>
+                            </button>
+                        </div>
+
+                        {resetSuccess ? (
+                            <div className="bg-green-500/10 border border-green-500/50 rounded-lg p-4 text-center">
+                                <span className="material-icons-round text-green-400 text-4xl mb-2">check_circle</span>
+                                <p className="text-green-400 font-medium">Password reset email sent!</p>
+                                <p className="text-slate-400 text-sm mt-2">Check your inbox for the reset link.</p>
+                            </div>
+                        ) : (
+                            <form onSubmit={handleForgotPassword} className="space-y-4">
+                                <p className="text-slate-300 text-sm">
+                                    Enter your email address and we'll send you a link to reset your password.
+                                </p>
+
+                                <div>
+                                    <label htmlFor="reset-email" className="block text-sm font-medium text-slate-300 mb-2">
+                                        Email Address
+                                    </label>
+                                    <input
+                                        id="reset-email"
+                                        type="email"
+                                        value={resetEmail}
+                                        onChange={(e) => setResetEmail(e.target.value)}
+                                        required
+                                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600/50 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#135bec] focus:border-transparent transition-all"
+                                        placeholder="you@example.com"
+                                    />
+                                </div>
+
+                                {resetError && (
+                                    <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-3 text-red-400 text-sm">
+                                        {resetError}
+                                    </div>
+                                )}
+
+                                <button
+                                    type="submit"
+                                    disabled={resetLoading}
+                                    className="w-full py-3 bg-gradient-to-r from-[#135bec] to-[#4a90ff] text-white font-semibold rounded-lg shadow-lg shadow-[#135bec]/30 hover:shadow-[#135bec]/50 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {resetLoading ? 'Sending...' : 'Send Reset Link'}
+                                </button>
+                            </form>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};

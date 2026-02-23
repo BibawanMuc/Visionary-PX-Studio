@@ -6,6 +6,7 @@ import { AppState, ContextOption, StyleOption } from './types';
 import { generateImageFromSketch, editGeneratedImage } from '../../services/sketchService';
 import { useGeneratedContent } from '../../hooks/useGeneratedContent';
 import { GeneratedSketch } from '../../lib/database.types';
+import { supabase } from '../../lib/supabaseClient';
 
 export const SketchStudio: React.FC = () => {
     // ========================================================================
@@ -50,25 +51,58 @@ export const SketchStudio: React.FC = () => {
             setSketchData(snapshot);
             setAppState(AppState.GENERATING);
 
+            // Generate image (returns a base64 data-URL)
             const result = await generateImageFromSketch(snapshot, context, style, aspectRatio);
             setGeneratedImage(result);
             setAppState(AppState.RESULT);
 
-            // Auto-save to database
+            // Upload generated image to Supabase Storage
+            // (storing raw base64 in the DB would exceed the request payload limit)
+            let imageUrl = result; // fallback to data-URL if upload fails
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                    const base64Data = result.replace(/^data:image\/\w+;base64,/, '');
+                    const byteCharacters = atob(base64Data);
+                    const byteArray = new Uint8Array(byteCharacters.length);
+                    for (let i = 0; i < byteCharacters.length; i++) {
+                        byteArray[i] = byteCharacters.charCodeAt(i);
+                    }
+                    const blob = new Blob([byteArray], { type: 'image/png' });
+                    const fileName = `${user.id}/${Date.now()}.png`;
+
+                    const { error: uploadError } = await supabase.storage
+                        .from('sketches')
+                        .upload(fileName, blob, { contentType: 'image/png', upsert: false });
+
+                    if (!uploadError) {
+                        const { data: urlData } = supabase.storage
+                            .from('sketches')
+                            .getPublicUrl(fileName);
+                        imageUrl = urlData.publicUrl;
+                    } else {
+                        console.warn('[SketchStudio] Storage upload failed, saving data-URL:', uploadError.message);
+                    }
+                }
+            } catch (uploadErr) {
+                console.warn('[SketchStudio] Storage upload error:', uploadErr);
+            }
+
+            // Save to database (only permanent URL, not the raw base64 sketch)
             await saveSketch({
-                sketch_data: snapshot,
-                generated_image_url: result,
+                sketch_data: '',  // omitted — too large for DB, not needed for history
+                generated_image_url: imageUrl,
                 context,
                 style,
                 edit_history: [],
             });
 
-            // Reload history to show new sketch
+            // Reload history
             const sketches = await loadSketchHistory(20);
             setHistory(sketches);
         } catch (err: any) {
             console.error(err);
-            setError(err.message || "Failed to generate image. Please try again.");
+            setError(err.message || 'Failed to generate image. Please try again.');
             setAppState(AppState.DRAWING);
         }
     };

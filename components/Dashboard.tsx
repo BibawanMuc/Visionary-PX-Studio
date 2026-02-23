@@ -76,13 +76,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView, navigateToItem })
 
         // Add sketches
         if (sketchesResult.success && sketchesResult.data) {
-            const sketches = (sketchesResult.data as GeneratedSketch[]).map(sketch => ({
-                id: sketch.id,
-                type: 'SKETCH' as const,
-                url: sketch.generated_image_url, // Use generated image (always exists after generation)
-                title: `${sketch.context} - ${sketch.style}`,
-                timestamp: formatTimestamp(sketch.created_at),
-            }));
+            const sketches = (sketchesResult.data as GeneratedSketch[])
+                .filter(sketch => !!sketch.generated_image_url) // skip old failed saves
+                .map(sketch => ({
+                    id: sketch.id,
+                    type: 'SKETCH' as const,
+                    url: sketch.generated_image_url!,
+                    title: `${sketch.context} - ${sketch.style}`,
+                    timestamp: formatTimestamp(sketch.created_at),
+                }));
             allContent.push(...sketches);
         }
 
@@ -247,7 +249,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView, navigateToItem })
                                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-100 p-3 flex flex-col justify-end">
                                         <div className="flex items-center justify-between">
                                             <span className={`text-[10px] px-2 py-0.5 rounded-full text-white font-bold uppercase tracking-wider ${item.type === 'VIDEO' ? 'bg-purple-600' :
-                                                item.type === 'THUMBNAIL' ? 'bg-emerald-500' : 'bg-primary'
+                                                item.type === 'THUMBNAIL' ? 'bg-emerald-500' :
+                                                item.type === 'SKETCH' ? 'bg-orange-500' : 'bg-primary'
                                                 }`}>
                                                 {item.type}
                                             </span>

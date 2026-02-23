@@ -118,8 +118,12 @@ const ResultView: React.FC<ResultViewProps> = ({
               <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center justify-between">
                 Original Sketch
               </h3>
-              <div className="bg-white rounded-lg overflow-hidden border border-slate-600 aspect-video relative">
-                <img src={originalSketch} alt="Sketch" className="w-full h-full object-contain" />
+              <div className="bg-white rounded-lg overflow-hidden border border-slate-600 aspect-video relative flex items-center justify-center">
+                {originalSketch ? (
+                  <img src={originalSketch} alt="Sketch" className="w-full h-full object-contain" />
+                ) : (
+                  <span className="text-slate-400 text-xs">Not available for restored sketches</span>
+                )}
               </div>
             </div>
 

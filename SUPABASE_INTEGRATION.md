@@ -2,223 +2,277 @@
 
 ## 🚀 Quick Start
 
-Your Visionary PX Studio app is fully integrated with Supabase! All features are working and data is persisted.
+Visionary PX Studio ist vollständig mit Supabase integriert — sowohl für den KI-Studio-Bereich als auch für das integrierte PX Inventar Modul.
 
 ### First Time Setup
 
-1. **Start the app:**
+1. **App starten:**
+
    ```bash
    npm run dev
    ```
 
-2. **Create an account:**
-   - Navigate to `http://localhost:3000`
-   - Click "Sign Up" on the login screen
-   - Fill in your name, email, and password
-   - You'll be automatically logged in
+2. **Konto erstellen:**
+   - `http://localhost:3000` öffnen
+   - "Sign Up" klicken, Name, E-Mail und Passwort eingeben
+   - Automatischer Login danach
 
-3. **Start creating:**
-   - All your generations are automatically saved
-   - Access them anytime from the Dashboard
-   - Click on any item to restore it in the respective tool
+3. **Loslegen:**
+   - KI-Studio: Alle Generierungen werden automatisch in Supabase gespeichert
+   - PX Inventar: Über Dashboard → "PX Inventar" Karte erreichbar
 
 ---
 
 ## ✅ Fully Implemented Features
 
 ### 🔐 Authentication
-- ✅ **Login/Signup** - Email & password authentication
-- ✅ **Session Persistence** - Stay logged in across page refreshes
-- ✅ **Password Reset** - Secure email-based password recovery
-- ✅ **Logout** - Clean session termination
+
+- ✅ **Login/Signup** — Email & Password
+- ✅ **Session Persistence** — Bleibt über Page-Refreshes eingeloggt
+- ✅ **Password Reset** — Sicheres E-Mail-basiertes Passwort-Recovery
+- ✅ **Logout** — Saubere Session-Termination
+- ✅ **Role System** — `profiles.role` = `'user'` | `'admin'`
 
 ### 👤 Profile Management
-- ✅ **User Profiles** - Name and avatar synced with database
-- ✅ **Avatar Upload** - Custom avatars stored in Supabase Storage
-- ✅ **Real-time Updates** - Changes reflected immediately across the app
 
-### 💾 Content Persistence
+- ✅ **User Profiles** — Name, Avatar, Rolle
+- ✅ **Avatar Upload** — In Supabase Storage gespeichert
+- ✅ **Real-time Updates** — Änderungen sofort in der gesamten App sichtbar
 
-All generators automatically save to Supabase:
+### 💾 KI Studio — Content Persistence
+
+Alle Generatoren speichern automatisch in Supabase:
 
 #### 🎨 Image Gen
+
 ```typescript
-// Automatically saves after generation
 await saveImage({
   prompt: "Your prompt",
   model: "gemini-2.0-flash-exp",
   image_url: generatedUrl,
-  config: { aspectRatio, mode }
+  config: { aspectRatio, mode },
 });
 ```
 
 #### 🎥 Video Studio
+
 ```typescript
-// Saves videos with metadata
 await saveVideo({
   prompt: "Your prompt",
   model: "veo-3.1-fast-generate-preview",
   video_url: generatedUrl,
-  config: { aspectRatio, duration, cameraMotion }
+  config: { aspectRatio, duration, cameraMotion },
 });
 ```
 
 #### 🖼️ Thumbnail Engine
+
 ```typescript
-// Saves complete thumbnail composition
 await saveThumbnail({
   topic: "Video topic",
-  background_prompt: bgPrompt,
-  element_prompt: elementPrompt,
-  text_content: textContent,
+  background_prompt,
+  element_prompt,
+  text_content,
   thumbnail_url: generatedUrl,
-  config: { aspectRatio, textStyle }
-});
-```
-
-#### 📝 Text Engine
-```typescript
-// Saves text with platform info
-await saveText({
-  topic: "Your topic",
-  platform: "YouTube",
-  content: generatedText,
-  config: { tone, audience }
-});
-```
-
-#### 📖 Story Studio
-```typescript
-// Saves complete story projects
-await saveStory({
-  title: "Story title",
-  genre: "Action",
-  story_content: fullStory,
-  shots: shotsArray,
-  config: { style, duration, characters }
+  config: { aspectRatio, textStyle },
 });
 ```
 
 #### ✏️ Sketch Studio
+
 ```typescript
-// Saves sketch and generated image
 await saveSketch({
   sketch_data: sketchBase64,
   generated_image_url: generatedUrl,
   context: "HUMAN",
   style: "CINEMATIC",
-  edit_history: []
+  edit_history: [],
 });
 ```
-
-### 🏠 Dashboard Integration
-- ✅ **Unified View** - All content types in one masonry grid
-- ✅ **Click Navigation** - Cards navigate to respective tools with loaded content
-- ✅ **Auto-refresh** - Latest generations appear automatically
-- ✅ **Type Filtering** - Visual distinction between images, videos, thumbnails
 
 ---
 
 ## 📊 Database Schema
 
-### Tables
+### KI Studio Tables
 
 #### `profiles`
-User profile information
+
 ```sql
-- id (uuid, references auth.users)
-- name (text)
-- avatar_url (text)
-- created_at (timestamp)
-- updated_at (timestamp)
+id          uuid  references auth.users (PK)
+email       text
+full_name   text
+avatar_url  text
+role        text  default 'user'  -- 'user' | 'admin'
+created_at  timestamptz
+updated_at  timestamptz
 ```
 
 #### `generated_images`
-All image generations
+
 ```sql
-- id (uuid)
-- user_id (uuid, references profiles)
-- prompt (text)
-- model (text)
-- image_url (text)
-- config (jsonb)
-- created_at (timestamp)
+id        uuid (PK)
+user_id   uuid references profiles
+prompt    text
+model     text
+image_url text
+config    jsonb
+created_at timestamptz
 ```
 
 #### `generated_videos`
-All video generations
+
 ```sql
-- id (uuid)
-- user_id (uuid)
-- prompt (text)
-- model (text)
-- video_url (text)
-- thumbnail_url (text, nullable)
-- config (jsonb)
-- created_at (timestamp)
+id            uuid (PK)
+user_id       uuid references profiles
+prompt        text
+model         text
+video_url     text
+thumbnail_url text
+config        jsonb
+created_at    timestamptz
 ```
 
-#### `generated_thumbnails`
-YouTube thumbnail compositions
+#### `generated_thumbnails`, `generated_texts`, `generated_sketches`, `stories`
+
+Siehe vollständiges Schema in `.sql/schema.sql`.
+
+---
+
+### PX Inventar Tables
+
+#### `inventar_items`
+
 ```sql
-- id (uuid)
-- user_id (uuid)
-- topic (text)
-- background_prompt (text)
-- element_prompt (text)
-- text_content (text)
-- thumbnail_url (text)
-- config (jsonb)
-- created_at (timestamp)
+id                 uuid (PK)
+px_nummer          text
+geraet             text   -- Gerätetyp (z.B. MacBook, iPhone)
+modell             text
+seriennummer       text
+status             text   -- 'Vorhanden' | 'Ausgeliehen' | 'Fehlt' | 'Defekt'
+ort                text
+department         text
+os                 text
+ip_office          text
+handy_nr           text
+assigned_to_name   text
+assigned_to_id     uuid references profiles
+px_eigentum        boolean
+is_verleihartikel  boolean
+anschaffungsdatum  date
+anschaffungspreis  numeric
+bild_url           text
+notes              text
+created_at / updated_at
 ```
 
-#### `generated_texts`
-Text generations
+#### `inventar_verleihscheine`
+
 ```sql
-- id (uuid)
-- user_id (uuid)
-- topic (text)
-- platform (text)
-- content (text)
-- config (jsonb)
-- created_at (timestamp)
+id              uuid (PK)
+borrower_type   text   -- 'team' | 'extern'
+profile_id      uuid references profiles
+extern_name     text
+extern_firma    text
+extern_email    text
+abholzeit       timestamptz
+rueckgabezeit   timestamptz
+prozentsatz     numeric
+gesamtkosten    numeric
+zweck           text
+notizen         text
+status          text   -- 'aktiv' | 'erledigt'
+created_by      uuid references profiles
+created_at / updated_at
 ```
 
-#### `generated_sketches`
-Sketch-to-image generations
+#### `inventar_verleihschein_items`
+
 ```sql
-- id (uuid)
-- user_id (uuid)
-- sketch_data (text) - Base64 encoded sketch
-- generated_image_url (text) - Generated image URL
-- context (text) - Subject context (Human, Animal, etc.)
-- style (text) - Artistic style (Cinematic, Photorealistic, etc.)
-- edit_history (jsonb) - Array of edit instructions
-- metadata (jsonb) - Additional generation metadata
-- created_at (timestamp)
+id                 uuid (PK)
+verleihschein_id   uuid references inventar_verleihscheine
+item_id            uuid references inventar_items
+anschaffungspreis  numeric
+tagespreis         numeric
+gesamtpreis        numeric
 ```
 
-#### `stories`
-Story Studio projects
+#### `inventar_loans` (einfache Ausleihen)
+
 ```sql
-- id (uuid)
-- user_id (uuid)
-- title (text)
-- genre (text)
-- story_content (text)
-- shots (jsonb)
-- config (jsonb)
-- created_at (timestamp)
-- updated_at (timestamp)
+id         uuid (PK)
+item_id    uuid references inventar_items
+user_id    uuid references profiles
+due_date   date
+notes      text
+returned_at timestamptz
+created_at timestamptz
 ```
 
-### Storage Buckets
+#### `inventar_logins`
 
-#### `avatars`
-User profile pictures
-- Public read access
-- Authenticated upload
-- RLS policies enforce user ownership
+```sql
+id          uuid (PK)
+dienst      text   -- z.B. Adobe, GitHub
+benutzername text
+passwort    text   -- verschlüsselt empfohlen!
+url         text
+notizen     text
+kategorie   text
+created_at / updated_at
+```
+
+#### `inventar_handyvertraege`
+
+```sql
+id            uuid (PK)
+anbieter      text
+rufnummer     text
+assigned_to   text
+vertragsbeginn date
+vertragsende  date
+monatlich     numeric
+notizen       text
+created_at / updated_at
+```
+
+#### `inventar_kreditkarten`
+
+```sql
+id            uuid (PK)
+bank          text
+karteninhaber text
+kartennummer  text  -- nur letzte 4 Ziffern empfohlen
+gueltig_bis   text
+limit_eur     numeric
+notizen       text
+created_at / updated_at
+```
+
+#### `inventar_firmendaten`
+
+```sql
+id          uuid (PK)
+kategorie   text  -- 'Bankverbindung' | 'Handelsregister'
+bezeichner  text
+wert        text
+anmerkung   text
+datei_name  text
+sort_order  integer
+created_at / updated_at
+```
+
+#### `inventar_links`
+
+```sql
+id           uuid (PK)
+titel        text
+url          text
+beschreibung text
+kategorie    text   -- z.B. 'Sharepoint', 'Rechtliches', 'Tools'
+sort_order   integer default 0
+created_at / updated_at
+```
 
 ---
 
@@ -226,26 +280,53 @@ User profile pictures
 
 ### Row Level Security (RLS)
 
-All tables have RLS enabled with policies:
+Alle Tabellen haben RLS enabled.
+
+#### KI Studio — User-scoped
 
 ```sql
--- Users can only read their own data
+-- Jeder User sieht nur eigene Generierungen
 CREATE POLICY "Users can view own content"
   ON generated_images FOR SELECT
   USING (auth.uid() = user_id);
+```
 
--- Users can only insert their own data
-CREATE POLICY "Users can create own content"
-  ON generated_images FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
+#### PX Inventar — Team-scoped + Admin-only
 
--- Similar policies for all other tables
+```sql
+-- Alle eingeloggten User können lesen
+CREATE POLICY "Team kann Inventar sehen"
+  ON inventar_items FOR SELECT
+  USING (auth.role() = 'authenticated');
+
+-- Nur Admins können schreiben
+CREATE POLICY "Admins verwalten Inventar"
+  ON inventar_items FOR ALL
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE profiles.id = auth.uid()
+      AND profiles.role = 'admin'
+    )
+  );
+
+-- Interne Links: alle lesen, Admins schreiben
+CREATE POLICY "Alle sehen Links" ON inventar_links
+  FOR SELECT USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Admins können Links verwalten" ON inventar_links
+  FOR ALL USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE profiles.id = auth.uid() AND profiles.role = 'admin'
+    )
+  );
 ```
 
 ### Storage Security
 
 ```sql
--- Users can upload their own avatars
+-- Avatare: authentifizierter Upload, öffentliches Lesen
 CREATE POLICY "Users can upload own avatar"
   ON storage.objects FOR INSERT
   WITH CHECK (
@@ -253,68 +334,14 @@ CREATE POLICY "Users can upload own avatar"
     auth.uid()::text = (storage.foldername(name))[1]
   );
 
--- Users can view all avatars (public)
-CREATE POLICY "Avatars are publicly accessible"
-  ON storage.objects FOR SELECT
-  USING (bucket_id = 'avatars');
+-- Inventar-Bilder: Admin-Upload
+CREATE POLICY "Admins upload item images"
+  ON storage.objects FOR INSERT
+  WITH CHECK (
+    bucket_id = 'inventar-images' AND
+    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
+  );
 ```
-
----
-
-## 🎯 Usage Examples
-
-### Loading History
-
-```typescript
-import { useGeneratedContent } from '../hooks/useGeneratedContent';
-
-const { loadHistory } = useGeneratedContent();
-
-// Load last 20 images
-const { data, success } = await loadHistory('image', 20);
-
-// Load last 50 videos
-const { data, success } = await loadHistory('video', 50);
-
-// Load all thumbnails
-const { data, success } = await loadHistory('thumbnail', 100);
-```
-
-### Restoring Content
-
-```typescript
-// In Dashboard.tsx
-const handleCardClick = (item) => {
-  const type = item.image_url ? 'image' 
-    : item.video_url ? 'video' 
-    : 'thumbnail';
-  
-  navigateToItem(item.id, type);
-};
-
-// In ImageGen.tsx
-useEffect(() => {
-  if (selectedItemId && history.length > 0) {
-    const item = history.find(h => h.id === selectedItemId);
-    if (item) {
-      setCurrentImage(item.image_url);
-      setPrompt(item.prompt);
-      onItemLoaded?.();
-    }
-  }
-}, [selectedItemId, history]);
-```
-
----
-
-## 🎨 Design Integration
-
-Authentication pages match the app's cyberpunk aesthetic:
-- ✅ Dark theme with glassmorphism
-- ✅ Neon blue accents (#135bec)
-- ✅ Smooth animations and transitions
-- ✅ Fully responsive design
-- ✅ Material Icons integration
 
 ---
 
@@ -333,24 +360,50 @@ VITE_GEMINI_API_KEY=your-gemini-api-key
 
 ---
 
-## 📚 Additional Resources
+## 🎯 Rollen-System
 
-- [APP_INFO.md](./APP_INFO.md) - Complete feature documentation
-- [README.md](./README.md) - Quick start guide
-- [Supabase Docs](https://supabase.com/docs) - Official documentation
-- [Walkthrough](file:///Users/px-admin/.gemini/antigravity/brain/b706ba97-4701-41b3-ba6f-2b81e7641657/walkthrough.md) - Implementation details
+Admins werden in Supabase direkt in der `profiles` Tabelle gesetzt:
+
+```sql
+UPDATE profiles
+SET role = 'admin'
+WHERE email = 'deine@email.de';
+```
+
+Admins sehen im Inventar zusätzlich:
+
+- Bearbeiten/Löschen-Buttons (hover-sichtbar)
+- Admin-only Module: Handyverträge, Kreditkarten, Firmendaten
+- "Link hinzufügen" Button auf der Internen Links Seite
 
 ---
 
 ## ✨ What's Working
 
-**Everything!** The app is fully functional with:
-- ✅ Complete authentication flow
-- ✅ All generators saving to database
-- ✅ Dashboard showing all content
-- ✅ Navigation between tools with content restoration
-- ✅ Profile management with avatar upload
-- ✅ Password reset functionality
-- ✅ Real-time data synchronization
+**Alles!** Die App ist vollständig funktional:
 
-**No further integration needed** - start creating! 🚀
+**KI Studio:**
+
+- ✅ Kompletter Auth-Flow
+- ✅ Alle Generatoren speichern in Supabase
+- ✅ Dashboard zeigt alle Inhalte
+- ✅ Navigation zwischen Tools mit Content-Wiederherstellung
+- ✅ Profilverwaltung mit Avatar-Upload
+- ✅ Passwort-Reset
+
+**PX Inventar:**
+
+- ✅ Geräteverwaltung mit Fotos & CSV-Export
+- ✅ Verleih-System mit PDF-Erstellung
+- ✅ Kalenderansicht
+- ✅ Logins, Handyverträge, Kreditkarten, Firmendaten
+- ✅ Interne Links mit Kategorien & Favicon-Vorschau
+- ✅ Rollen-basierte Zugangskontrolle
+
+---
+
+## 📚 Weitere Ressourcen
+
+- [APP_INFO.md](./APP_INFO.md) — Vollständige Feature-Dokumentation
+- [README.md](./README.md) — Quick Start Guide
+- [Supabase Docs](https://supabase.com/docs) — Offizielle Dokumentation

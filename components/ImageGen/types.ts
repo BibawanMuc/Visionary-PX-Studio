@@ -1,3 +1,5 @@
+import type { ChangeEvent } from 'react';
+
 export interface ImageGenProps {
     selectedItemId?: string | null;
     onItemLoaded?: () => void;
@@ -24,7 +26,7 @@ export interface ImageControlsProps {
     prompt: string;
     setPrompt: (prompt: string) => void;
     uploadedImage: string | null;
-    onFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    onFileUpload: (e: ChangeEvent<HTMLInputElement>) => void;
     aspectRatio: AspectRatio;
     setAspectRatio: (ratio: AspectRatio) => void;
     onGenerate: () => void;

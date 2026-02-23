@@ -10,6 +10,7 @@ export enum AppView {
   SKETCH_STUDIO = 'SKETCH_STUDIO',
   CHAT_BOT = 'CHAT_BOT',
   SETTINGS = 'SETTINGS',
+  INVENTAR = 'INVENTAR',
 }
 
 export interface UserProfile {

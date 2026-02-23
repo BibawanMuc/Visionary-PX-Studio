@@ -122,7 +122,31 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView, navigateToItem })
                 <p className="text-slate-400">Your AI workspace is ready. What will you create today?</p>
             </div>
 
+            {/* Tools & Apps section */}
+            {setView && (
+                <div className="mb-8">
+                    <h2 className="text-lg font-bold text-white mb-4">Tools & Apps</h2>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                        <button
+                            onClick={() => setView(AppView.INVENTAR)}
+                            className="group relative flex items-center gap-3 p-4 rounded-2xl border border-slate-700/80 bg-slate-800/50 hover:bg-slate-800 hover:border-blue-500/40 transition-all duration-200 text-left overflow-hidden"
+                        >
+                            {/* Glow effect */}
+                            <div className="absolute inset-0 bg-gradient-to-br from-blue-600/5 to-indigo-600/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            <div className="relative w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center shrink-0 shadow-lg shadow-blue-900/30">
+                                <span className="material-icons-round text-white text-lg">inventory_2</span>
+                            </div>
+                            <div className="relative min-w-0">
+                                <p className="font-semibold text-white text-sm leading-tight">PX Inventar</p>
+                                <p className="text-xs text-slate-400 mt-0.5 truncate">Geräteverwaltung</p>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* Content */}
+
             <div className="flex items-center justify-between mb-6">
                 <h2 className="text-lg font-bold text-white">Recent Generations</h2>
                 {contentItems.length > 0 && (

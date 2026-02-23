@@ -12,6 +12,7 @@ import { StoryStudio } from './components/StoryStudio';
 import { SketchStudio } from './components/SketchStudio/SketchStudio';
 import { ChatBot } from './components/ChatBot';
 import { Settings } from './components/Settings';
+import { InventarApp } from './components/InventarApp';
 
 const AppContent: React.FC = () => {
   const { user, profile, loading } = useAuth();
@@ -95,6 +96,12 @@ const AppContent: React.FC = () => {
         <div className={`w-full h-full ${currentView === AppView.SETTINGS ? 'block' : 'hidden'}`}>
           <Settings userProfile={userProfile} />
         </div>
+
+        {currentView === AppView.INVENTAR && (
+          <div className="w-full h-full">
+            <InventarApp onBack={() => setCurrentView(AppView.DASHBOARD)} />
+          </div>
+        )}
 
       </div>
     </div>

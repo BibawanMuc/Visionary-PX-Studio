@@ -1,7 +1,48 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { GoogleGenAI, Chat, GenerateContentResponse } from "@google/genai";
+import ReactMarkdown from 'react-markdown';
 import { useGeneratedContent } from '../hooks/useGeneratedContent';
 import { ChatSession } from '../lib/database.types';
+import { supabase } from '../lib/supabaseClient';
+
+// ── Onboarding RAG helpers ─────────────────────────────────────────────────
+const EMBED_MODEL = 'gemini-embedding-001';
+
+async function embedText(text: string, apiKey: string): Promise<number[]> {
+  const resp = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${EMBED_MODEL}:embedContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: `models/${EMBED_MODEL}`,
+        content: { parts: [{ text }] },
+        taskType: 'RETRIEVAL_QUERY',
+        outputDimensionality: 768,
+      }),
+    }
+  );
+  if (!resp.ok) throw new Error(`Embed API error: ${resp.status}`);
+  const data = await resp.json();
+  return data.embedding.values as number[];
+}
+
+async function retrieveOnboardingContext(question: string, apiKey: string): Promise<string> {
+  try {
+    const embedding = await embedText(question, apiKey);
+    const { data, error } = await supabase.rpc('match_onboarding_docs', {
+      query_embedding: embedding,
+      match_count: 5,
+    });
+    if (error || !data?.length) return '';
+    return (data as { heading: string; content: string }[])
+      .map(r => `### ${r.heading}\n${r.content}`)
+      .join('\n\n');
+  } catch (err) {
+    console.warn('[OnboardingRAG] retrieval failed:', err);
+    return '';
+  }
+}
 
 interface Message {
   id: string;
@@ -143,10 +184,26 @@ export const ChatBot: React.FC = () => {
     setIsTyping(true);
 
     try {
-      const resultStream = await chatSessionRef.current.sendMessageStream({ message: userMsg.text });
+      let messageToSend = userMsg.text;
+
+      // ── RAG: inject company knowledge for Onboarding persona ──────────────
+      if (activePersona.id === 'onboarding') {
+        const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || process.env.API_KEY || '';
+        const context = await retrieveOnboardingContext(userMsg.text, apiKey);
+        if (context) {
+          messageToSend =
+            `Beantworte die folgende Frage basierend auf dem Pixelschickeria-Firmenwissen. ` +
+            `Antworte auf Deutsch, freundlich und präzise. ` +
+            `Falls die Antwort nicht im Kontext steht, sag das ehrlich.\n\n` +
+            `--- FIRMENWISSEN ---\n${context}\n--- ENDE ---\n\n` +
+            `Frage: ${userMsg.text}`;
+        }
+      }
+      // ─────────────────────────────────────────────────────────────────────
+
+      const resultStream = await chatSessionRef.current.sendMessageStream({ message: messageToSend });
 
       const modelMsgId = (Date.now() + 1).toString();
-      // Add empty model message to start
       setMessages(prev => [...prev, { id: modelMsgId, role: 'model', text: '' }]);
 
       let fullText = '';
@@ -161,7 +218,6 @@ export const ChatBot: React.FC = () => {
         }
       }
 
-      // Auto-save session after successful exchange
       setTimeout(() => saveCurrentSession(), 500);
     } catch (error) {
       console.error("Chat error:", error);
@@ -278,8 +334,28 @@ export const ChatBot: React.FC = () => {
               <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-2 ${msg.role === 'user' ? 'bg-white text-black' : 'bg-primary text-white'}`}>
                 <span className="material-icons-round text-sm">{msg.role === 'user' ? 'person' : 'auto_awesome'}</span>
               </div>
-              <div className={`max-w-[85%] md:max-w-[70%] p-4 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${msg.role === 'user' ? 'bg-white text-black rounded-tr-none' : 'glass-card text-slate-200 rounded-tl-none border-white/10'}`}>
-                {msg.text}
+              <div className={`max-w-[85%] md:max-w-[70%] p-4 rounded-2xl text-sm leading-relaxed ${msg.role === 'user' ? 'bg-white text-black rounded-tr-none whitespace-pre-wrap' : 'glass-card text-slate-200 rounded-tl-none border-white/10'}`}>
+                {msg.role === 'user' ? msg.text : (
+                  <ReactMarkdown
+                    components={{
+                      h1: ({ children }) => <h1 className="text-base font-bold text-white mb-2 mt-1">{children}</h1>,
+                      h2: ({ children }) => <h2 className="text-sm font-bold text-white mb-1.5 mt-3">{children}</h2>,
+                      h3: ({ children }) => <h3 className="text-sm font-semibold text-slate-200 mb-1 mt-2">{children}</h3>,
+                      p: ({ children }) => <p className="mb-2 last:mb-0 text-slate-200">{children}</p>,
+                      ul: ({ children }) => <ul className="list-disc list-inside space-y-1 mb-2 text-slate-300">{children}</ul>,
+                      ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 mb-2 text-slate-300">{children}</ol>,
+                      li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+                      strong: ({ children }) => <strong className="font-bold text-white">{children}</strong>,
+                      em: ({ children }) => <em className="italic text-slate-300">{children}</em>,
+                      code: ({ children }) => <code className="bg-black/40 text-primary px-1.5 py-0.5 rounded text-xs font-mono">{children}</code>,
+                      blockquote: ({ children }) => <blockquote className="border-l-2 border-primary/50 pl-3 my-2 text-slate-400 italic">{children}</blockquote>,
+                      hr: () => <hr className="border-white/10 my-3" />,
+                      a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{children}</a>,
+                    }}
+                  >
+                    {msg.text}
+                  </ReactMarkdown>
+                )}
               </div>
             </div>
           ))}

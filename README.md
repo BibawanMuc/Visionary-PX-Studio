@@ -107,9 +107,10 @@ Visionary PX Studio vereint Google's leistungsstärkste KI-Modelle (Gemini & Veo
 
 ### 💬 **Chat Bot**
 
-- 4 Personas (Creative, Tech, Marketing, General)
-- Kontext-Awareness
-- Streaming-Antworten
+- 6 Personas: Creative, Tech, Marketing, SEO, General, **Onboarding Support**
+- **Onboarding Support Bot** mit RAG (Retrieval-Augmented Generation) — durchsucht automatisch die interne Firmenwissensdatenbank
+- Streaming-Antworten mit **Markdown-Rendering** (Überschriften, Listen, Bold, Code)
+- Chat-History mit Wiederherstellung
 
 ### ⚙️ **Settings**
 
@@ -133,7 +134,7 @@ Vollständiges internes Geräte- und Ressourcenmanagementsystem, zugänglich dir
 - **📱 Handyverträge** — Mobilfunkvertrag-Übersicht
 - **💳 Kreditkarten** — Kreditkarten-Verwaltung
 - **🏢 Firmendaten** — Bankverbindung & Handelsregisterdaten
-- **🔗 Interne Links** — Teamlinks (Sharepoint, AGB, Website etc.) mit Kategorien & Favicon-Vorschau
+- **🔗 Interne Links** — Teamlinks mit Kategorien, **Google Favicon CDN** & farbiger Buchstaben-Avatar Fallback
 
 ### Rollen
 
@@ -165,7 +166,8 @@ Siehe [SUPABASE_INTEGRATION.md](./SUPABASE_INTEGRATION.md) für Details.
 - `generated_videos` — Videogenerierungen
 - `generated_thumbnails` — Thumbnails
 - `generated_texts` — Texte
-- `generated_sketches` — Sketch-to-Image
+- `generated_sketches` — Sketch-to-Image (Bild in Supabase Storage, URL in DB)
+- `onboarding_embeddings` — Vektordatenbank für RAG-Chatbot (pgvector, 768-dim)
 - `stories` — Story Studio Projekte
 
 ### Inventar Tabellen
@@ -186,10 +188,11 @@ Siehe [SUPABASE_INTEGRATION.md](./SUPABASE_INTEGRATION.md) für Details.
 - **Frontend:** React 19, TypeScript, Vite
 - **Styling:** Tailwind CSS
 - **Backend:** Supabase (Auth, Database, Storage)
-- **AI:** Google Gemini 2.0, Veo 3.1
+- **AI:** Google Gemini 2.0–2.5, Veo 3.1, Gemini Embedding (`gemini-embedding-001`)
 - **Routing:** React Router DOM (MemoryRouter für Inventar-Isolation)
 - **Icons:** Material Icons Rounded, Lucide React
 - **PDF:** jsPDF, QRCode React
+- **Markdown:** React Markdown
 - **Toasts:** React Hot Toast
 
 ---

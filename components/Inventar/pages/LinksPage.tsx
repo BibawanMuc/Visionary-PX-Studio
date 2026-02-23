@@ -10,10 +10,21 @@ import type { InternalLink } from '../types'
 function getFavicon(url: string) {
   try {
     const origin = new URL(url).origin
-    return `${origin}/favicon.ico`
+    // Use Google's Favicon CDN — works for SharePoint, Teams etc.
+    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(origin)}&sz=32`
   } catch {
     return null
   }
+}
+
+// Color palette for letter-avatar fallback
+const AVATAR_COLORS = [
+  'bg-blue-600', 'bg-violet-600', 'bg-emerald-600', 'bg-orange-500',
+  'bg-rose-600', 'bg-cyan-600', 'bg-amber-500', 'bg-fuchsia-600',
+]
+function avatarColor(label: string) {
+  const i = (label.charCodeAt(0) || 0) % AVATAR_COLORS.length
+  return AVATAR_COLORS[i]
 }
 
 const KATEGORIE_VORSCHLAEGE = [
@@ -128,7 +139,10 @@ function LinkCard({ link, isAdmin, onEdit, onDelete }: LinkCardProps) {
             onError={() => setImgError(true)}
           />
         ) : (
-          <Link2 size={16} className="text-slate-400" />
+          // Letter‑avatar fallback: colored initial instead of a generic icon
+          <span className={`w-full h-full flex items-center justify-center text-sm font-bold text-white rounded-xl ${avatarColor(link.titel)}`}>
+            {link.titel.charAt(0).toUpperCase()}
+          </span>
         )}
       </div>
 

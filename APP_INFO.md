@@ -61,14 +61,19 @@ Vollständiger Story-to-Video Workflow mit KI-Unterstützung.
 
 Verwandeln Sie einfache Skizzen in fotorealistische Bilder mit KI.
 
-- **Features:** Interaktives Canvas, Undo/Redo, Context/Stil-Auswahl, Aspect Ratio, Bild-Editing mit Text, Fullscreen-Preview.
+- **Features:** Interaktives Canvas, Undo/Redo, Context/Stil-Auswahl, Aspect Ratio, Bild-Editing mit Text, Fullscreen-Preview
 - **Modell:** `gemini-2.5-flash-image`
+- **Persistenz:** Generiertes Bild wird zu Supabase Storage (`sketches` Bucket) hochgeladen; nur die URL wird in `generated_sketches` gespeichert (verhindert Payload-Limits)
 
 ### 8. 💬 Chat Bot
 
-Ein vielseitiger KI-Assistent mit verschiedenen Persönlichkeiten.
+Ein vielseitiger KI-Assistent mit verschiedenen Persönlichkeiten und RAG-Wissensdatenbank.
 
-- **Personas:** Creative Partner, Tech Expert, Marketing Guru, Visionary AI.
+- **Personas:** Medien-Analyst, DevX Assistant, Content Stratege, Marketing & SEO Pro, Gemini General, **Onboarding Support**
+- **Onboarding Support (RAG):** Nutzt `gemini-embedding-001` um Fragen zu vektorisieren, durchsucht die `onboarding_embeddings` Tabelle via `match_onboarding_docs` RPC und liefert kontextgenaue Antworten aus dem internen Firmenwissen (NTK-Dokument)
+- **Seeding:** `scripts/seed-onboarding.mjs` vectorisiert beliebige `.docx`-Dokumente in 768-dim Embeddings
+- **Markdown-Rendering:** Alle Bot-Antworten werden als formatiertes Markdown gerendert (Überschriften, Listen, Bold, Inline-Code, Links)
+- **History:** Chat-Sessions werden in Supabase gespeichert und können wiederhergestellt werden
 
 ### 9. ⚙️ Benutzereinstellungen
 
@@ -82,18 +87,18 @@ Vollständiges internes Geräte- und Ressourcenmanagementsystem. Zugänglich üb
 
 ### Module & Seiten
 
-| Seite                | Beschreibung                                                    | Rollen                 |
-| -------------------- | --------------------------------------------------------------- | ---------------------- |
-| **Dashboard**        | Übersicht: Geräte-Stats, aktive Ausleihen                       | Alle                   |
-| **Inventar**         | Gerätliste mit Filtern, Suche, Status, Fotos, CSV-Export        | Alle / Admin: CRUD     |
-| **Verleih**          | Aktive & archivierte Ausleihen mit Rückgabe-Funktion            | Alle / Admin: Aktionen |
-| **Verleih-Formular** | Neuen Verleihschein erstellen, Kostenberechnung, PDF            | Alle                   |
-| **Kalender**         | Monatsansicht aller aktiven Ausleihen                           | Alle                   |
-| **Logins**           | Zugangsdaten (z.B. Software-Accounts)                           | Alle / Admin: CRUD     |
-| **Handyverträge**    | Mobilfunkvertrag-Übersicht                                      | Admin only             |
-| **Kreditkarten**     | Kreditkarten-Verwaltung                                         | Admin only             |
-| **Firmendaten**      | Bankverbindung & Handelsregisterdaten                           | Admin only             |
-| **Interne Links**    | Team-Links (Sharepoint, AGB, Website…) mit Kategorien & Favicon | Alle / Admin: CRUD     |
+| Seite                | Beschreibung                                                               | Rollen                 |
+| -------------------- | -------------------------------------------------------------------------- | ---------------------- |
+| **Dashboard**        | Übersicht: Geräte-Stats, aktive Ausleihen                                  | Alle                   |
+| **Inventar**         | Gerätliste mit Filtern, Suche, Status, Fotos, CSV-Export                   | Alle / Admin: CRUD     |
+| **Verleih**          | Aktive & archivierte Ausleihen mit Rückgabe-Funktion                       | Alle / Admin: Aktionen |
+| **Verleih-Formular** | Neuen Verleihschein erstellen, Kostenberechnung, PDF                       | Alle                   |
+| **Kalender**         | Monatsansicht aller aktiven Ausleihen                                      | Alle                   |
+| **Logins**           | Zugangsdaten (z.B. Software-Accounts)                                      | Alle / Admin: CRUD     |
+| **Handyverträge**    | Mobilfunkvertrag-Übersicht                                                 | Admin only             |
+| **Kreditkarten**     | Kreditkarten-Verwaltung                                                    | Admin only             |
+| **Firmendaten**      | Bankverbindung & Handelsregisterdaten                                      | Admin only             |
+| **Interne Links**    | Team-Links mit Kategorien, Google Favicon CDN & Buchstaben-Avatar Fallback | Alle / Admin: CRUD     |
 
 ### Rollen-System
 
@@ -126,8 +131,9 @@ Vollständiges internes Geräte- und Ressourcenmanagementsystem. Zugänglich üb
 - `generated_videos` — Videogenerierungen
 - `generated_thumbnails` — Thumbnail-Generierungen
 - `generated_texts` — Textgenerierungen
-- `generated_sketches` — Sketch-to-Image Generierungen
+- `generated_sketches` — Sketch-to-Image (Bild in Storage, URL in DB)
 - `stories` — Story Studio Projekte
+- `onboarding_embeddings` — RAG-Vektordatenbank (pgvector 768-dim, `gemini-embedding-001`)
 
 #### PX Inventar
 

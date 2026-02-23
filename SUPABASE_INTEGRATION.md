@@ -137,6 +137,39 @@ created_at    timestamptz
 
 Siehe vollständiges Schema in `.sql/schema.sql`.
 
+#### `onboarding_embeddings` (RAG-Vektordatenbank)
+
+Speichert Abschnitte aus dem "Need To Know" Onboarding-Dokument als 768-dim Vektoren für den RAG-Chatbot.
+
+```sql
+id         uuid (PK, default gen_random_uuid())
+heading    text            -- Abschnittsüberschrift
+content    text            -- Abschnittstext
+tokens     int             -- Geschätzte Tokenanzahl
+embedding  vector(768)     -- gemini-embedding-001, 768 Dimensionen
+created_at timestamptz
+```
+
+**Seeding:** Einmalig via `node scripts/seed-onboarding.mjs` — liest das `.docx`, chunked nach Überschriften, embeddet via Gemini und schreibt in diese Tabelle.
+
+**Supabase RPC:** Für Similarity Search muss folgende SQL-Funktion einmalig im SQL Editor ausgeführt werden:
+
+```sql
+create or replace function match_onboarding_docs(
+  query_embedding vector(768),
+  match_count int default 5
+)
+returns table (id uuid, heading text, content text, similarity float)
+language sql stable as $$
+  select id, heading, content,
+    1 - (embedding <=> query_embedding) as similarity
+  from onboarding_embeddings
+  where embedding is not null
+  order by embedding <=> query_embedding
+  limit match_count;
+$$;
+```
+
 ---
 
 ### PX Inventar Tables
